@@ -1,5 +1,6 @@
 import torch
 from tqdm import tqdm
+from run3 import get_query_span
 from utils import PromptUtils
 import random 
 
@@ -26,7 +27,6 @@ def select_retrieval_heads(train_queries, model, tokenizer, tools, device, max_h
     head_scores = torch.zeros(num_layers, num_heads, device=device)
 
     for qix in tqdm(range(len(train_queries))):
-
         sample = train_queries[qix]
         question = sample["text"]
         gold_tool_name = sample["gold_tool_name"]
@@ -53,9 +53,22 @@ def select_retrieval_heads(train_queries, model, tokenizer, tools, device, max_h
             attentions = model(**inputs).attentions 
 
         # Add your head scoring logic after this line
+        query_span = get_query_span(inputs, tokenizer, question, putils)
+        gold_tool_span = item_spans[map_docname_id[gold_tool_name]]
+
+        query_attn = attentions[-1][:, :, query_span[0]:query_span[1], :]
+        gold_tool_attn = query_attn[:, :, :, gold_tool_span[0]:gold_tool_span[1]]
+        head_scores += gold_tool_attn.sum(dim=(3, 4)).squeeze(1)
 
     # TODO: select top heads
     selected_heads = []
+    
+    top_values, top_indices = torch.topk(head_scores.view(-1), max_heads)
+    for idx in top_indices:
+        idx_val = idx.item()
+        layer = idx_val // num_heads
+        head = idx_val % num_heads
+        selected_heads.append((layer, head))
 
     # example expected format:
     # [(layer1, head3), (layer5, head10), ...]

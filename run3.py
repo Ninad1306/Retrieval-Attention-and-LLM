@@ -46,17 +46,34 @@ def query_to_docs_attention_heads(attentions, query_span, doc_spans, selected_he
     """
 
     doc_scores = torch.zeros(len(doc_spans), device=attentions[0].device)
+    
+    selected_head_attns = []
+    for layer, head in selected_heads:
+        # Extract [N, N] directly by specifying index 0 for batch, and 'head' for heads
+        head_attn = attentions[layer][0, head, :, :] 
+        selected_head_attns.append(head_attn)
+    
+    averaged_attn = torch.stack(selected_head_attns, dim=0).mean(dim=0) 
+    query_attn = averaged_attn[query_span[0]:query_span[1], :] 
 
-    raise NotImplementedError
+    for idx, (doc_start, doc_end) in enumerate(doc_spans):
+        doc_attn = query_attn[:, doc_start:doc_end] 
+        doc_scores[idx] = doc_attn.sum()
 
-
-def get_query_span(input_ids, tokenizer):
+def get_query_span(inputs, tokenizer, question, putils):
     # TODO 3: Query span
     """
     Identify the token span corresponding to the query.
     Note: you are free to add/remove args in this function
     """
-    raise NotImplementedError
+    query_prompt = f"Query: {question}"+ "\nCorrect tool_id:"
+    query_tokens = tokenizer(query_prompt, add_special_tokens = False).to(device)
+    query_len = len(query_tokens)
+    total_length = inputs.input_ids.shape[1] # shape is [1, sequence_length]
+
+    end_idx = total_length - putils.prompt_suffix_length
+    start_idx = end_idx - query_len
+    return (start_idx, end_idx)
 
 
 parser = argparse.ArgumentParser()
@@ -91,9 +108,8 @@ if __name__ == '__main__':
     print(selected_heads)
 
     print("\n[Phase 2] Evaluating on test set...")
-    recall_at_1 = 0
     correct_at_1 = 0
-    total = 0
+    correct_at_5 = 0
 
     for qix in tqdm(range(len(test_queries))):
 
@@ -128,7 +144,7 @@ if __name__ == '__main__':
         with torch.no_grad():
             attentions = model(**inputs).attentions
 
-        query_span = get_query_span()
+        query_span = get_query_span(inputs, tokenizer, question, putils)
 
         doc_scores = query_to_docs_attention_heads(
             attentions,
@@ -144,7 +160,12 @@ if __name__ == '__main__':
 
 
         # TODO: measure the recall@1, recall@5
-        total += 1
+        if gold_rank == 0:
+            correct_at_1 += 1
+        if gold_rank < 5:
+            correct_at_5 += 1
 
-    recall_at_1 = correct_at_1 / total
+    recall_at_1 = correct_at_1 / len(test_queries)
+    recall_at_5 = correct_at_5 / len(test_queries)
     print(f"\nRecall@1 (selected heads): {recall_at_1:.4f}")
+    print(f"\nRecall@5 (selected heads): {recall_at_5:.4f}")
