@@ -1,0 +1,15 @@
+===== FINAL RESULTS Part-1 =====
+BM25:
+  Recall@1: 0.1882
+  Recall@5: 0.3452
+  Skipped: 0
+
+MiniLM:
+  Recall@1: 0.3882
+  Recall@5: 0.6106
+  Skipped: 0
+
+UAE-large-v1:
+  Recall@1: 0.6158
+  Recall@5: 0.8690
+  Skipped: 0
