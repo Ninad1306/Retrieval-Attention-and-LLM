@@ -59,6 +59,8 @@ def query_to_docs_attention_heads(attentions, query_span, doc_spans, selected_he
     for idx, (doc_start, doc_end) in enumerate(doc_spans):
         doc_attn = query_attn[:, doc_start:doc_end] 
         doc_scores[idx] = doc_attn.sum()
+    
+    return doc_scores
 
 def get_query_span(inputs, tokenizer, question, putils):
     # TODO 3: Query span
@@ -67,8 +69,8 @@ def get_query_span(inputs, tokenizer, question, putils):
     Note: you are free to add/remove args in this function
     """
     query_prompt = f"Query: {question}"+ "\nCorrect tool_id:"
-    query_tokens = tokenizer(query_prompt, add_special_tokens = False).to(device)
-    query_len = len(query_tokens)
+    query_tokens = tokenizer(query_prompt, add_special_tokens = False)
+    query_len = len(query_tokens["input_ids"])
     total_length = inputs.input_ids.shape[1] # shape is [1, sequence_length]
 
     end_idx = total_length - putils.prompt_suffix_length
@@ -124,8 +126,6 @@ if __name__ == '__main__':
         random.shuffle(shuffled_keys)
 
         putils = PromptUtils(
-            dataset="toole",
-            model_name=args.model,
             tokenizer=tokenizer,
             doc_ids=shuffled_keys,
             dict_all_docs=tools,

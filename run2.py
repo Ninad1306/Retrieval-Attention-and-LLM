@@ -102,8 +102,8 @@ def get_query_span(inputs, tokenizer, question, putils):
     Note: you are free to add/remove args in this function
     """
     query_prompt = f"Query: {question}"+ "\nCorrect tool_id:"
-    query_tokens = tokenizer(query_prompt, add_special_tokens = False).to(device)
-    query_len = len(query_tokens)
+    query_tokens = tokenizer(query_prompt, add_special_tokens = False)
+    query_len = len(query_tokens["input_ids"])
     total_length = inputs.input_ids.shape[1] # shape is [1, sequence_length]
 
     end_idx = total_length - putils.prompt_suffix_length
