@@ -1,8 +1,25 @@
 import torch
 from tqdm import tqdm
-from run3 import get_query_span
 from utils import PromptUtils
-import random 
+import random
+
+
+def get_query_span(inputs, tokenizer, question, putils):
+    # TODO 3: Query span
+    """
+    Identify the token span corresponding to the query.
+    Note: you are free to add/remove args in this function
+    """
+    query_prompt = f"Query: {question}" + "\nCorrect tool_id:"
+    query_tokens = tokenizer(query_prompt, add_special_tokens=False).input_ids
+    query_len = len(query_tokens)
+    total_length = inputs.input_ids.shape[1]  # shape is [1, sequence_length]
+
+    end_idx = total_length - putils.prompt_suffix_length
+    start_idx = end_idx - query_len
+
+    return (start_idx, end_idx)
+
 
 def select_retrieval_heads(train_queries, model, tokenizer, tools, device, max_heads=20):
     # TODO 3: Head selection
@@ -34,9 +51,9 @@ def select_retrieval_heads(train_queries, model, tokenizer, tools, device, max_h
         tool_ids = list(tools.keys())
         random.shuffle(tool_ids)
         putils = PromptUtils(
-        tokenizer=tokenizer, 
-        doc_ids=tool_ids, 
-        dict_all_docs=tools,
+            tokenizer=tokenizer,
+            doc_ids=tool_ids,
+            dict_all_docs=tools,
         )
         item_spans = putils.doc_spans
         doc_lengths = putils.doc_lengths
@@ -56,9 +73,12 @@ def select_retrieval_heads(train_queries, model, tokenizer, tools, device, max_h
         query_span = get_query_span(inputs, tokenizer, question, putils)
         gold_tool_span = item_spans[map_docname_id[gold_tool_name]]
 
-        query_attn = attentions[-1][:, :, query_span[0]:query_span[1], :]
-        gold_tool_attn = query_attn[:, :, :, gold_tool_span[0]:gold_tool_span[1]]
-        head_scores += gold_tool_attn.sum(dim=(3, 4)).squeeze(1)
+        # Score each (layer, head) by how much attention the query pays to the gold tool
+        for layer_idx, layer_attn in enumerate(attentions):
+            # layer_attn: [1, num_heads, N, N]
+            query_attn = layer_attn[0, :, query_span[0]:query_span[1], :]  # [num_heads, q_len, N]
+            gold_attn = query_attn[:, :, gold_tool_span[0]:gold_tool_span[1]]  # [num_heads, q_len, doc_len]
+            head_scores[layer_idx] += gold_attn.sum(dim=(1, 2))  # sum over q_len and doc_len -> [num_heads]
 
     # TODO: select top heads
     selected_heads = []
